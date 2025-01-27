@@ -2,9 +2,11 @@
 package version
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -243,52 +245,39 @@ func (v *Version) Equal(b *Version) bool {
 
 // Compare returns 0 if the k0s version is equal to the supplied version, 1 if it's greater and -1 if it's lower
 func (v *Version) Compare(b *Version) int {
-	if v.Equal(b) {
-		return 0
+	if cmp := slices.Compare(v.segments[:], b.segments[:]); cmp != 0 {
+		return cmp
 	}
-	for i := 0; i < maxSegments; i++ {
-		if v.numSegments >= i+1 && b.numSegments >= i+1 {
-			if v.segments[i] > b.segments[i] {
-				return 1
+
+	if v.pre != "" {
+		if b.pre != "" {
+			if cmp := cmp.Compare(v.pre, b.pre); cmp != 0 {
+				return cmp
 			}
-			if v.segments[i] < b.segments[i] {
-				return -1
-			}
-		}
-		if i >= v.numSegments && i < b.numSegments {
-			// b has more segments, so it's greater
+		} else {
 			return -1
 		}
-		if i >= b.numSegments && i < v.numSegments {
-			// v has more segments, so it's greater
+	} else if b.pre != "" {
+		return 1
+	}
+
+	if v.isK0s {
+		if b.isK0s {
+			if cmp := cmp.Compare(v.k0s, b.k0s); cmp != 0 {
+				return cmp
+			}
+		} else {
 			return 1
 		}
-	}
-	if v.pre == "" && b.pre != "" {
-		return 1
-	}
-	if v.pre != "" && b.pre == "" {
+	} else if b.isK0s {
 		return -1
 	}
-	// segments are equal, so compare pre
-	if v.pre < b.pre {
-		return -1
+
+	// order x.x before x.x.0
+	if cmp := cmp.Compare(v.numSegments, b.numSegments); cmp != 0 {
+		return cmp
 	}
-	if v.pre > b.pre {
-		return 1
-	}
-	if v.isK0s && !b.isK0s {
-		return 1
-	}
-	if !v.isK0s && b.isK0s {
-		return -1
-	}
-	if v.k0s > b.k0s {
-		return 1
-	}
-	if v.k0s < b.k0s {
-		return -1
-	}
+
 	// meta should not affect precedence
 	return 0
 }
